@@ -1,0 +1,14 @@
+# PHPStorm project files
+.idea
+
+# NetBeans project files
+nbproject
+
+# Eclipse project files
+.buildpath
+.project
+.settings
+
+# Composer utils
+composer.lock
+vendor/

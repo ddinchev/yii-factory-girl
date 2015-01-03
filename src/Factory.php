@@ -16,8 +16,8 @@ class Factory extends \CApplicationComponent
      */
     public $initScriptSuffix = '.init.php';
     /**
-     * @var string the base path containing all fixtures. Defaults to null, meaning
-     * the path 'protected/tests/fixtures'.
+     * @var string the base path containing all factories. Defaults to null, meaning
+     * the path 'protected/tests/factories'.
      */
     public $basePath;
     /**
@@ -32,7 +32,7 @@ class Factory extends \CApplicationComponent
      * default schema). This property is mainly used when turning on and off integrity checks
      * so that fixture data can be populated into the database without causing problem.
      */
-    public $schemas=array('');
+    public $schemas = array('');
 
     /**
      * @var \CDbConnection
@@ -46,7 +46,7 @@ class Factory extends \CApplicationComponent
     {
         parent::init();
         if ($this->basePath === null) {
-            $this->basePath = \Yii::getPathOfAlias('application.tests.fixtures');
+            $this->basePath = \Yii::getPathOfAlias('application.tests.factories');
         }
         $this->prepare();
     }
@@ -69,9 +69,9 @@ class Factory extends \CApplicationComponent
     }
 
     /**
-     * Prepares the fixtures for the whole test.
+     * Prepares the factories for the whole test.
      * This method is invoked in {@link init}. It executes the database init script
-     * if it exists. Otherwise, it will load all available fixtures.
+     * if it exists. Otherwise, it will load all available factories.
      */
     public function prepare()
     {
@@ -82,12 +82,30 @@ class Factory extends \CApplicationComponent
         if (is_file($initFile)) {
             require($initFile);
         } else {
-            foreach ($this->getFixtures() as $tableName => $fixturePath) {
+            foreach ($this->getFactories() as $tableName => $factoryPath) {
                 $this->resetTable($tableName);
-                $this->loadFixture($tableName);
+                // $this->loadFactory($tableName);
             }
         }
         $this->checkIntegrity(true);
+    }
+
+    /**
+     * Resets the table to the state that it contains no fixture data.
+     * If there is an init script named "tests/factories/TableName.init.php",
+     * the script will be executed.
+     * Otherwise, {@link truncateTable} will be invoked to delete all rows in the table
+     * and reset primary key sequence, if any.
+     * @param string $tableName the table name
+     */
+    public function resetTable($tableName)
+    {
+        $initFile = $this->basePath . DIRECTORY_SEPARATOR . $tableName . $this->initScriptSuffix;
+        if (is_file($initFile)) {
+            require($initFile);
+        } else {
+            $this->truncateTable($tableName);
+        }
     }
 
     /**
@@ -97,8 +115,87 @@ class Factory extends \CApplicationComponent
      */
     public function checkIntegrity($check)
     {
-        foreach($this->schemas as $schema) {
-            $this->getDbConnection()->getSchema()->checkIntegrity($check,$schema);
+        foreach ($this->schemas as $schema) {
+            $this->getDbConnection()->getSchema()->checkIntegrity($check, $schema);
         }
+    }
+
+    /**
+     * Removes all rows from the specified table and resets its primary key sequence, if any.
+     * You may need to call {@link checkIntegrity} to turn off integrity check temporarily
+     * before you call this method.
+     * @param string $tableName the table name
+     * @throws \CException if given table does not exist
+     */
+    public function truncateTable($tableName)
+    {
+        $db = $this->getDbConnection();
+        $schema = $db->getSchema();
+        if (($table = $schema->getTable($tableName)) !== null) {
+            $db->createCommand('DELETE FROM ' . $table->rawName)->execute();
+            $schema->resetSequence($table, 1);
+        } else {
+            throw new \CException("Table '$tableName' does not exist.");
+        }
+    }
+
+    /**
+     * Truncates all tables in the specified schema.
+     * You may need to call {@link checkIntegrity} to turn off integrity check temporarily
+     * before you call this method.
+     * @param string $schema the schema name. Defaults to empty string, meaning the default database schema.
+     * @see truncateTable
+     */
+    public function truncateTables($schema = '')
+    {
+        $tableNames = $this->getDbConnection()->getSchema()->getTableNames($schema);
+        foreach ($tableNames as $tableName) {
+            $this->truncateTable($tableName);
+        }
+    }
+
+    /**
+     * Returns \CActiveRecord instance that is not yet saved.
+     * @param $class
+     * @param array $args
+     * @param null $alias
+     * @return \CActiveRecord
+     */
+    public function build($class, array $args, $alias = null)
+    {
+
+    }
+
+    /**
+     * Returns \CActiveRecord instance that is saved.
+     * @param $class
+     * @param array $args
+     * @param null $alias
+     * @return \CActiveRecord
+     */
+    public function create($class, array $args, $alias = null)
+    {
+
+    }
+
+    /**
+     * Returns array of attributes that can be set to a \CActiveRecord model
+     * @param $class
+     * @param $args
+     * @param $alias
+     * @return array
+     */
+    public function attributes($class, $args, $alias)
+    {
+
+    }
+
+    /**
+     * Returns the class attributes used to construct the model.
+     * @return array
+     */
+    protected function getFactory()
+    {
+
     }
 }

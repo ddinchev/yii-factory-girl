@@ -45,13 +45,9 @@ class Factory extends \CApplicationComponent
      */
     protected $_db;
     /**
-     * @var array
+     * @var FactoryData[] (class name => FactoryData)
      */
     protected $_factoryData;
-    /**
-     * @var array
-     */
-    protected $_factoryConfig;
 
     /**
      * Initializes this application component.
@@ -96,9 +92,8 @@ class Factory extends \CApplicationComponent
         if (is_file($initFile)) {
             require($initFile);
         } else {
-            foreach ($this->getFactoryData() as $className => $factoryData) {
+            foreach ($this->loadFactoryData() as $className => $factoryData) {
                 $this->resetTable($factoryData->tableName);
-                // $this->loadFactory($factoryData);
             }
         }
         $this->checkIntegrity(true);
@@ -129,7 +124,7 @@ class Factory extends \CApplicationComponent
      * @return FactoryData[] the information of the available factories (class name => FactoryData)
      * @throw FactoryException if there is a misbehaving file in the factory data files path
      */
-    public function getFactoryData()
+    protected function loadFactoryData()
     {
         if ($this->_factoryData === null) {
             $this->_factoryData = array();
@@ -204,9 +199,18 @@ class Factory extends \CApplicationComponent
      * @param null $alias
      * @return \CActiveRecord
      */
-    public function build($class, array $args, $alias = null)
+    public function build($class, array $args = array(), $alias = null)
     {
-
+        $obj = new $class;
+        $reflection = new \ReflectionObject($obj);
+        $factory = $this->getFactoryData($class);
+        $attributes = $factory->getAttributes($args, $alias);
+        foreach ($attributes as $key => $value) {
+            $property = $reflection->getProperty($key);
+            $property->setAccessible(true);
+            $property->setValue($value);
+        }
+        return $obj;
     }
 
     /**
@@ -216,9 +220,38 @@ class Factory extends \CApplicationComponent
      * @param null $alias
      * @return \CActiveRecord
      */
-    public function create($class, array $args, $alias = null)
+    public function create($class, array $args = array(), $alias = null)
     {
+        $obj = $this->build($class, $args, $alias);
 
+        $schema = $this->getDbConnection()->getSchema();
+        $builder = $schema->getCommandBuilder();
+        $table = $schema->getTable($obj->tableName());
+
+        // make sure it gets inserted
+        $this->checkIntegrity(false);
+
+        // attributes to insert
+        $attributes = $obj->getAttributes(false);
+        $builder->createInsertCommand($table, $attributes)->execute();
+
+        $primaryKey = $table->primaryKey;
+        if ($table->sequenceName !== null) {
+            if (is_string($primaryKey) && !isset($attributes[$primaryKey])) {
+                $obj->{$primaryKey} = $builder->getLastInsertID($table);
+            } elseif(is_array($primaryKey)) {
+                foreach($primaryKey as $pk) {
+                    if (!isset($attributes[$pk])) {
+                        $obj->{$pk} = $builder->getLastInsertID($table);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // re-enable foreign key check state
+        $this->checkIntegrity(true);
+        return $obj;
     }
 
     /**
@@ -228,16 +261,23 @@ class Factory extends \CApplicationComponent
      * @param $alias
      * @return array
      */
-    public function attributes($class, $args, $alias)
+    public function attributes($class, array $args = array(), $alias)
     {
-
+        return $this->getFactoryData($class)->getAttributes($args, $alias);
     }
 
     /**
-     * @param $class
+     * @param string $class
+     * @return FactoryData|false
+     * @throws FactoryException
      */
-    public function getFactory($class) {
-
+    public function getFactoryData($class) {
+        if (!isset($this->_factoryData[$class])) {
+            throw new FactoryException(\Yii::t('yii-factory-girl', 'There is no {class} class loaded.', array(
+                '{class}' => $class,
+            )));
+        }
+        return $this->_factoryData[$class];
     }
 }
 
@@ -251,8 +291,9 @@ class FactoryData extends \CComponent
     public $fileName;
     public $tableName;
     public $className;
-    public $attributes;
-    public $aliases;
+
+    protected $_attributes;
+    protected $_aliases;
 
     public function __construct(Factory $factory, $path)
     {
@@ -289,6 +330,20 @@ class FactoryData extends \CComponent
         unset($config['attributes']);
         $this->aliases = $config;
     }
+
+    public function getAttributes($args = array(), $alias = null)
+    {
+        $attributes = array();
+        if ($alias !== null) {
+            $attributes = array_merge($this->_attributes, $this->_aliases[$alias]);
+        }
+        $attributes = array_merge($attributes, $args);
+        foreach ($attributes as $key => $value) {
+            $attributes[$key] = Sequence::get($value);
+        }
+        return $attributes;
+    }
+
 }
 
 /**

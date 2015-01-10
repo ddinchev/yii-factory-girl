@@ -6,11 +6,11 @@ class Factory extends \CApplicationComponent
 {
     /**
      * @var string the name of the initialization script that would be executed before the whole test set runs.
-     * Defaults to 'init.php'. If the script does not exist, every table with a fixture file will be reset.
+     * Defaults to 'init.php'. If the script does not exist, every table with a factory file will be reset.
      */
     public $initScript = 'init.php';
     /**
-     * @var string the suffix for fixture initialization scripts.
+     * @var string the suffix for factory initialization scripts.
      * If a table is associated with such a script whose name is TableName suffixed this property value,
      * then the script will be executed each time before the table is reset.
      */
@@ -30,14 +30,28 @@ class Factory extends \CApplicationComponent
      * @var array list of database schemas that the test tables may reside in. Defaults to
      * array(''), meaning using the default schema (an empty string refers to the
      * default schema). This property is mainly used when turning on and off integrity checks
-     * so that fixture data can be populated into the database without causing problem.
+     * so that factory data can be populated into the database without causing problem.
      */
     public $schemas = array('');
+    /**
+     * @var string the suffix for the factory files where the file name is constructed
+     * from the \CActiveRecord class name and the suffix. Eg. by default "UsersFactory" would
+     * expect that you create a factory for the "Users" \CActiveRecord model
+     */
+    public $factoryFileSuffix = 'Factory';
 
     /**
      * @var \CDbConnection
      */
     protected $_db;
+    /**
+     * @var array
+     */
+    protected $_factoryData;
+    /**
+     * @var array
+     */
+    protected $_factoryConfig;
 
     /**
      * Initializes this application component.
@@ -52,7 +66,7 @@ class Factory extends \CApplicationComponent
     }
 
     /**
-     * Returns the database connection used to load fixtures.
+     * Returns the database connection used to load factories.
      * @throws \CException if {@link connectionID} application component is invalid
      * @return \CDbConnection the database connection
      */
@@ -61,7 +75,7 @@ class Factory extends \CApplicationComponent
         if ($this->_db === null) {
             $this->_db = \Yii::app()->getComponent($this->connectionID);
             if (!$this->_db instanceof \CDbConnection) {
-                throw new \CException(Yii::t('yii', 'CDbTestFixture.connectionID "{id}" is invalid. Please make sure it refers to the ID of a CDbConnection application component.',
+                throw new \CException(\Yii::t('yii-factory-girl', '\YiiFactoryGirl\Factory.connectionID "{id}" is invalid. Please make sure it refers to the ID of a CDbConnection application component.',
                     array('{id}' => $this->connectionID)));
             }
         }
@@ -82,16 +96,16 @@ class Factory extends \CApplicationComponent
         if (is_file($initFile)) {
             require($initFile);
         } else {
-            foreach ($this->getFactories() as $tableName => $factoryPath) {
-                $this->resetTable($tableName);
-                // $this->loadFactory($tableName);
+            foreach ($this->getFactoryData() as $className => $factoryData) {
+                $this->resetTable($factoryData->tableName);
+                // $this->loadFactory($factoryData);
             }
         }
         $this->checkIntegrity(true);
     }
 
     /**
-     * Resets the table to the state that it contains no fixture data.
+     * Resets the table to the state that it contains data.
      * If there is an init script named "tests/factories/TableName.init.php",
      * the script will be executed.
      * Otherwise, {@link truncateTable} will be invoked to delete all rows in the table
@@ -106,6 +120,35 @@ class Factory extends \CApplicationComponent
         } else {
             $this->truncateTable($tableName);
         }
+    }
+
+    /**
+     * Returns the information of the available factories.
+     * This method will search for all PHP files under {@link basePath}.
+     * If a file's name is the same as a table name, it is considered to be the factories data for that table.
+     * @return FactoryData[] the information of the available factories (class name => FactoryData)
+     * @throw FactoryException if there is a misbehaving file in the factory data files path
+     */
+    public function getFactoryData()
+    {
+        if ($this->_factoryData === null) {
+            $this->_factoryData = array();
+            $folder = opendir($this->basePath);
+            $suffixLen = strlen($this->initScriptSuffix);
+            while ($file = readdir($folder)) {
+                if ($file === '.' || $file === '..' || $file === $this->initScript) {
+                    continue;
+                }
+                $path = $this->basePath . DIRECTORY_SEPARATOR . $file;
+                if (substr($file, -4) === '.php' && is_file($path) && substr($file, -$suffixLen) !== $this->initScriptSuffix) {
+                    $data = new FactoryData($this, $path);
+                    $this->_factoryData[$data->className] = $data;
+
+                }
+            }
+            closedir($folder);
+        }
+        return $this->_factoryData;
     }
 
     /**
@@ -191,11 +234,66 @@ class Factory extends \CApplicationComponent
     }
 
     /**
-     * Returns the class attributes used to construct the model.
-     * @return array
+     * @param $class
      */
-    protected function getFactory()
-    {
+    public function getFactory($class) {
 
     }
 }
+
+/**
+ * Class FactoryData
+ * Used to represent all properties of a file under the factory base path
+ * @package YiiFactoryGirl
+ */
+class FactoryData extends \CComponent
+{
+    public $fileName;
+    public $tableName;
+    public $className;
+    public $attributes;
+    public $aliases;
+
+    public function __construct(Factory $factory, $path)
+    {
+        // determine just the filename
+        $suffix = "$factory->factoryFileSuffix.php";
+        $this->fileName = end(explode(DIRECTORY_SEPARATOR, $path));
+        if (!substr($this->fileName, -(strlen($suffix)) === $suffix || !is_file($path))) {
+            throw new \CException(\Yii::t('yii-factory-girl', '"{file}" does not seem to be factory data file.', array(
+                '{file}' => $path
+            )));
+        }
+
+        // determine class and table names
+        $className = str_replace($suffix, '', $this->fileName);
+        try {
+            $this->tableName = $className::model()->tableName();
+            $this->className = $className;
+        } catch (\CException $e) {
+            throw new FactoryException(\Yii::t('yii-factory-girl', 'Unable to call {class}::model()->tableName().', array(
+                '{class}' => $className
+            )));
+        }
+
+        // load actual config
+        $config = require $path;
+        if (!is_array($config) || !isset($config['attributes']) || !is_array($config['attributes'])) {
+            throw new FactoryException(\Yii::t('yii-factory-girl', '"{path}" expected to return config array with "attributes" inside.', array(
+                '{path}' => $path,
+            )));
+        }
+
+        // load attributes and assume the rest of the config is aliases
+        $this->attributes = $config['attributes'];
+        unset($config['attributes']);
+        $this->aliases = $config;
+    }
+}
+
+/**
+ * Class FactoryException
+ * Extension specific exceptions.
+ * @package YiiFactoryGirl
+ */
+class FactoryException extends \CException { }

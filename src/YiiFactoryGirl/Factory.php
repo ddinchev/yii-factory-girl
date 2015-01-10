@@ -92,11 +92,25 @@ class Factory extends \CApplicationComponent
         if (is_file($initFile)) {
             require($initFile);
         } else {
-            foreach ($this->loadFactoryData() as $className => $factoryData) {
-                $this->resetTable($factoryData->tableName);
+            $factoryData = $this->loadFactoryData();
+            foreach ($factoryData as $className => $factory) {
+                $this->resetTable($factory->tableName);
             }
         }
         $this->checkIntegrity(true);
+    }
+
+    /**
+     * Clean up the database records created by calling Factory->create()
+     * Should be called in tearDown() method in tests to avoid side effects.
+     */
+    public function flush()
+    {
+        $factoryData = $this->loadFactoryData();
+        foreach ($factoryData as $className => $factory) {
+            $this->resetTable($factory->tableName);
+        }
+        Sequence::resetAll();
     }
 
     /**

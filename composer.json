@@ -1,5 +1,5 @@
 {
-    "name": "ddinchev/yii-factory-girl",
+    "name": "ddinchev/YiiFactoryGirl",
     "description": "Yii 1.1 fixture replacement framework. Inspired by factory_girl_rails and kengos' FactoryGirl for Yii.",
     "require": {
         "php": ">=5.3.0"

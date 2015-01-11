@@ -35,7 +35,7 @@ composer init
         "phpunit/php-invoker": ">=1.1",
         "phpunit/phpunit-selenium": ">=1.2",
         "phpunit/phpunit-story": ">=1.0",
-        "ddinchev/yii-factory-girl": "dev"
+        "ddinchev/yii-factory-girl": "dev-master"
     }
 }
 ```
@@ -43,13 +43,22 @@ composer init
 Setup
 ------
 
-In your bootstrap.php
+First, add the component to your test config (`protected\config\test.php`). The `YiiFactoryGirl\Factory` component has more attributes than the listed below. They are well documented in the class itself.
 
-require_once('/your/download/path/factory_girl_0.1.0.phar');
-use FactoryGirl\Factory as FactoryGirl;
-$factoryPaths = array('foo/bar/factories', 'bar/baz/factories');
-FactoryGirl::setup($factoryPaths);
+```php
+return array(
+    // ...
+    'components' => array(
+        // ...
+        'factorygirl' => array(
+            'class' => 'YiiFactoryGirl\Factory',
+            // the following properties have the following default values,
+            // if they don't work out for you, feel encouraged to set them accordingly
+            // 'basePath' => 'protected/tests/factories',
+            // 'factoryFileSuffix' => Factory, // so it would expect $basePath/UsersFactory.php for Users class factory
+        )
+    )
+);
+```
 
-Documentation
---------------
-
+Second, optionally create predefined factory data files under `protected\tests\factories` (configurable). They use the following file format.

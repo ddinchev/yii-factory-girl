@@ -150,7 +150,7 @@ class Factory extends \CApplicationComponent
                 }
                 $path = $this->basePath . DIRECTORY_SEPARATOR . $file;
                 if (substr($file, -4) === '.php' && is_file($path) && substr($file, -$suffixLen) !== $this->initScriptSuffix) {
-                    $data = new FactoryData($this, $path);
+                    $data = FactoryData::fromFile($path, "{$this->factoryFileSuffix}.php");
                     $this->_factoryData[$data->className] = $data;
 
                 }
@@ -215,14 +215,24 @@ class Factory extends \CApplicationComponent
      */
     public function build($class, array $args = array(), $alias = null)
     {
+        /* @var $obj \CActiveRecord */
         $obj = new $class;
         $reflection = new \ReflectionObject($obj);
         $factory = $this->getFactoryData($class);
         $attributes = $factory->getAttributes($args, $alias);
         foreach ($attributes as $key => $value) {
-            $property = $reflection->getProperty($key);
-            $property->setAccessible(true);
-            $property->setValue($value);
+            if ($obj->hasAttribute($key)) {
+                $obj->setAttribute($key, $value);
+            } else if ($reflection->hasProperty($key)) {
+                $property = $reflection->getProperty($key);
+                $property->setAccessible(true);
+                $property->setValue($value);
+            } else {
+                throw new FactoryException(\Yii::t('yii-factory-girl', 'Unknown attribute "{attr} for class {class}.', array(
+                    '{attr}' => $key,
+                    '{class}' => $class
+                )));
+            }
         }
         return $obj;
     }
@@ -246,7 +256,7 @@ class Factory extends \CApplicationComponent
         $this->checkIntegrity(false);
 
         // attributes to insert
-        $attributes = $obj->getAttributes(false);
+        $attributes = $obj->getAttributes();
         $builder->createInsertCommand($table, $attributes)->execute();
 
         $primaryKey = $table->primaryKey;
@@ -287,9 +297,18 @@ class Factory extends \CApplicationComponent
      */
     public function getFactoryData($class) {
         if (!isset($this->_factoryData[$class])) {
-            throw new FactoryException(\Yii::t('yii-factory-girl', 'There is no {class} class loaded.', array(
-                '{class}' => $class,
-            )));
+            try {
+                $obj = new $class;
+                if (!($obj instanceof \CActiveRecord)) {
+                    // trigger, catch and rethrow proper error
+                    throw new \CException("Bad param");
+                }
+            } catch (\CException $e) {
+                throw new FactoryException(\Yii::t('yii-factory-girl', 'There is no {class} class loaded.', array(
+                    '{class}' => $class,
+                )));
+            }
+            $this->_factoryData[$class] = new FactoryData($class);
         }
         return $this->_factoryData[$class];
     }
@@ -302,34 +321,60 @@ class Factory extends \CApplicationComponent
  */
 class FactoryData extends \CComponent
 {
-    public $fileName;
     public $tableName;
     public $className;
+    public $attributes;
+    public $aliases;
 
-    protected $_attributes;
-    protected $_aliases;
+    /**
+     * @param string $className
+     * @param array $attributes default attributes array
+     * @param array $aliases array of arrays where the key is alias name and the properties are
+     * @throws FactoryException
+     */
+    public function __construct($className, array $attributes = array(), array $aliases = array()) {
+        $this->className = $className;
+        try {
+            $this->tableName = $className::model()->tableName();
+        } catch (\CException $e) {
+            throw new FactoryException(\Yii::t('yii-factory-girl', 'Unable to call {class}::model()->tableName().', array(
+                '{class}' => $className
+            )));
+        }
+        $this->attributes = $attributes;
+        $this->aliases = $aliases;
+    }
 
-    public function __construct(Factory $factory, $path)
+    public function getAttributes($args = array(), $alias = null)
     {
-        // determine just the filename
-        $suffix = "$factory->factoryFileSuffix.php";
-        $this->fileName = end(explode(DIRECTORY_SEPARATOR, $path));
-        if (!substr($this->fileName, -(strlen($suffix)) === $suffix || !is_file($path))) {
+        $attributes = array();
+        if ($alias !== null) {
+            if (!isset($this->aliases[$alias])) {
+                throw new FactoryException(\Yii::t('yii-factory-girl', 'Alias "{alias}" not found for class "{class}"', array(
+                    '{alias}' => $alias,
+                    '{class}' => $this->className,
+                )));
+            }
+            $attributes = array_merge($this->attributes, $this->aliases[$alias]);
+        }
+        $attributes = array_merge($this->attributes, $args);
+        foreach ($attributes as $key => $value) {
+            $attributes[$key] = Sequence::get($value);
+        }
+        return $attributes;
+    }
+
+    public static function fromFile($path, $suffix) {
+        $parts = explode(DIRECTORY_SEPARATOR, $path);
+        $fileName = end($parts);
+        if (!substr($fileName, -(strlen($suffix)) === $suffix || !is_file($path))) {
             throw new \CException(\Yii::t('yii-factory-girl', '"{file}" does not seem to be factory data file.', array(
                 '{file}' => $path
             )));
         }
 
         // determine class and table names
-        $className = str_replace($suffix, '', $this->fileName);
-        try {
-            $this->tableName = $className::model()->tableName();
-            $this->className = $className;
-        } catch (\CException $e) {
-            throw new FactoryException(\Yii::t('yii-factory-girl', 'Unable to call {class}::model()->tableName().', array(
-                '{class}' => $className
-            )));
-        }
+        $className = str_replace($suffix, '', $fileName);
 
         // load actual config
         $config = require $path;
@@ -338,26 +383,12 @@ class FactoryData extends \CComponent
                 '{path}' => $path,
             )));
         }
-
         // load attributes and assume the rest of the config is aliases
-        $this->attributes = $config['attributes'];
+        $attributes = $config['attributes'];
         unset($config['attributes']);
-        $this->aliases = $config;
+        $aliases = $config;
+        return new self($className, $attributes, $aliases);
     }
-
-    public function getAttributes($args = array(), $alias = null)
-    {
-        $attributes = array();
-        if ($alias !== null) {
-            $attributes = array_merge($this->_attributes, $this->_aliases[$alias]);
-        }
-        $attributes = array_merge($attributes, $args);
-        foreach ($attributes as $key => $value) {
-            $attributes[$key] = Sequence::get($value);
-        }
-        return $attributes;
-    }
-
 }
 
 /**

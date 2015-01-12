@@ -119,7 +119,7 @@ class FactoryGirlIntegrationTest extends CTestCase
 ```
 
 
-In the above last example, if you haven't defined `VehiclesFactory.php` file, you can create factories just the same. All that `YiiFactoryGirl\Factory` expects is that there is a class named `Users` (or whatever you are trying to create) and you won't benefit from having predefined aliases/attributes which in many cases is just fine!
+In the above last example, if you haven't defined `VehiclesFactory.php` file, you can create factories just the same. All that `YiiFactoryGirl\Factory` expects is that a class named `Vehicles` exists (or whatever you are trying to create) and you won't benefit from having predefined aliases/attributes which in many cases is just fine!
 
 But there is one unpleasant small thing that you won't be able to use IDE auto-completion on your model created with `Yii::app()->factorygirl->create()`. First thing you can do is define a shortcut function in your tests bootstrap:
 

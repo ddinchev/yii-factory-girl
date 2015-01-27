@@ -25,7 +25,7 @@ class FactoryData extends \CComponent
         try {
             $this->tableName = $className::model()->tableName();
         } catch (\CException $e) {
-            throw new FactoryException(\Yii::t('yii-factory-girl', 'Unable to call {class}::model()->tableName().', array(
+            throw new FactoryException(\Yii::t(Factory::LOG_CATEGORY, 'Unable to call {class}::model()->tableName().', array(
                 '{class}' => $className
             )));
         }
@@ -38,7 +38,7 @@ class FactoryData extends \CComponent
         $attributes = $this->attributes;
         if ($alias !== null) {
             if (!isset($this->aliases[$alias])) {
-                throw new FactoryException(\Yii::t('yii-factory-girl', 'Alias "{alias}" not found for class "{class}"', array(
+                throw new FactoryException(\Yii::t(Factory::LOG_CATEGORY, 'Alias "{alias}" not found for class "{class}"', array(
                     '{alias}' => $alias,
                     '{class}' => $this->className,
                 )));
@@ -56,7 +56,7 @@ class FactoryData extends \CComponent
         $parts = explode(DIRECTORY_SEPARATOR, $path);
         $fileName = end($parts);
         if (!substr($fileName, -(strlen($suffix)) === $suffix || !is_file($path))) {
-            throw new FactoryException(\Yii::t('yii-factory-girl', '"{file}" does not seem to be factory data file.', array(
+            throw new FactoryException(\Yii::t(Factory::LOG_CATEGORY, '"{file}" does not seem to be factory data file.', array(
                 '{file}' => $path
             )));
         }
@@ -67,7 +67,7 @@ class FactoryData extends \CComponent
         // load actual config
         $config = require $path;
         if (!is_array($config) || !isset($config['attributes']) || !is_array($config['attributes'])) {
-            throw new FactoryException(\Yii::t('yii-factory-girl', '"{path}" expected to return config array with "attributes" inside.', array(
+            throw new FactoryException(\Yii::t(Factory::LOG_CATEGORY, '"{path}" expected to return config array with "attributes" inside.', array(
                 '{path}' => $path,
             )));
         }

@@ -4,6 +4,8 @@ namespace YiiFactoryGirl;
 
 class Factory extends \CApplicationComponent
 {
+    const LOG_CATEGORY = 'yii-factory-girl';
+
     /**
      * @var string the name of the initialization script that would be executed before the whole test set runs.
      * Defaults to 'init.php'. If the script does not exist, every table with a factory file will be reset.
@@ -71,7 +73,7 @@ class Factory extends \CApplicationComponent
         if ($this->_db === null) {
             $this->_db = \Yii::app()->getComponent($this->connectionID);
             if (!$this->_db instanceof \CDbConnection) {
-                throw new \CException(\Yii::t('yii-factory-girl', '\YiiFactoryGirl\Factory.connectionID "{id}" is invalid. Please make sure it refers to the ID of a CDbConnection application component.',
+                throw new \CException(\Yii::t(self::LOG_CATEGORY, '\YiiFactoryGirl\Factory.connectionID "{id}" is invalid. Please make sure it refers to the ID of a CDbConnection application component.',
                     array('{id}' => $this->connectionID)));
             }
         }
@@ -212,6 +214,7 @@ class Factory extends \CApplicationComponent
      * @param array $args
      * @param null $alias
      * @return \CActiveRecord
+     * @throws FactoryException
      */
     public function build($class, array $args = array(), $alias = null)
     {
@@ -228,7 +231,7 @@ class Factory extends \CApplicationComponent
                 $property->setAccessible(true);
                 $property->setValue($value);
             } else {
-                throw new FactoryException(\Yii::t('yii-factory-girl', 'Unknown attribute "{attr} for class {class}.', array(
+                throw new FactoryException(\Yii::t(self::LOG_CATEGORY, 'Unknown attribute "{attr} for class {class}.', array(
                     '{attr}' => $key,
                     '{class}' => $class
                 )));
@@ -304,7 +307,7 @@ class Factory extends \CApplicationComponent
                     throw new \CException("Bad param");
                 }
             } catch (\CException $e) {
-                throw new FactoryException(\Yii::t('yii-factory-girl', 'There is no {class} class loaded.', array(
+                throw new FactoryException(\Yii::t(self::LOG_CATEGORY, 'There is no {class} class loaded.', array(
                     '{class}' => $class,
                 )));
             }

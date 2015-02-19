@@ -224,17 +224,20 @@ class Factory extends \CApplicationComponent
         $factory = $this->getFactoryData($class);
         $attributes = $factory->getAttributes($args, $alias);
         foreach ($attributes as $key => $value) {
-            if ($obj->hasAttribute($key)) {
-                $obj->setAttribute($key, $value);
-            } else if ($reflection->hasProperty($key)) {
+            if ($reflection->hasProperty($key)) {
                 $property = $reflection->getProperty($key);
                 $property->setAccessible(true);
                 $property->setValue($value);
             } else {
-                throw new FactoryException(\Yii::t(self::LOG_CATEGORY, 'Unknown attribute "{attr} for class {class}.', array(
-                    '{attr}' => $key,
-                    '{class}' => $class
-                )));
+                try {
+                    $obj->__set($key, $value);
+                } catch(\CException $e) {
+                    \Yii::log($e->getMessage(), \CLogger::LEVEL_ERROR);
+                    throw new FactoryException(\Yii::t(self::LOG_CATEGORY, 'Unknown attribute "{attr} for class {class}.', array(
+                        '{attr}' => $key,
+                        '{class}' => $class
+                    )));
+                }
             }
         }
         return $obj;

@@ -47,7 +47,7 @@ class FactoryData extends \CComponent
         }
         $attributes = array_merge($attributes, $args);
         foreach ($attributes as $key => $value) {
-            $attributes[$key] = Sequence::get($value);
+            $attributes[$key] = is_object($value) ? $value : Sequence::get($value);
         }
         return $attributes;
     }

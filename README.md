@@ -5,8 +5,7 @@ yii-factory-girl is a fixtures replacement with a straightforward definition syn
 It was created in attempt to address the following limitations of kengos' FactoryGirlPHP:
 - [x] Bypass foreign key constrains just like `Yii CDbFixtureManager`
 - [x] Be a native `Yii` extension
-- [ ] Allow IDE autocompletion of created factories
-- [ ] Allow different strategies to store fixtures
+- [ ] Allow different strategies to store fixtures - yml, json // I actually never felt any need to do that
 
 
 Install
